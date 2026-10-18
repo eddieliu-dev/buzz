@@ -4,7 +4,9 @@
 
 An AI investigation workspace for GitHub issues and Slack reports. Follow each agent as it searches code, reads documentation, and examines logs.
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Integrations](#integrations) · [Development](#development)
+Originally built with teammates for a buildathon. This fork continues development from the [original team repository](https://github.com/yaojiejia/buildathon26).
+
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Integrations](#integrations) · [Development](#development) · [Team credits](#team-credits)
 
 ---
 
@@ -163,3 +165,9 @@ buzz/
 - **Report persistence:** Cases and transition history survive restarts; web investigation reports do not survive a page refresh.
 - **Cancellation:** Reset and navigation cancel the client stream. Python agent work already running may continue, and a retry starts a new run.
 - **Case lifecycle:** The investigation UI does not yet write its completion status or report back to the case record.
+
+## Team credits
+
+Buzz began as a collaborative buildathon project. The original agent pipeline, web interface, and GitHub/Slack integrations reflect the work of the team, and this fork builds on those contributions.
+
+Thanks to my teammates for their work on the original project. Their contributions are preserved in this repository's Git history. See the [original repository](https://github.com/yaojiejia/buildathon26) and its [contributors](https://github.com/yaojiejia/buildathon26/graphs/contributors) for individual credit.
