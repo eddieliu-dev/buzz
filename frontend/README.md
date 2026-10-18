@@ -120,6 +120,7 @@ frontend/
 - `npm run build` — Build for production
 - `npm run start` — Start production server
 - `npm run lint` — Run ESLint
+- `npm run typecheck` — Check TypeScript types without emitting files
 - `npm run db:push` — Push Prisma schema to the database (create/update tables)
 - `npm run db:studio` — Open Prisma Studio to inspect/edit the DB
 

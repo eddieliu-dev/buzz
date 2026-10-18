@@ -51,7 +51,7 @@ export function Navbar({ hideInvestigate = false }: { hideInvestigate?: boolean 
       <div className="flex items-center gap-2">
         {state.status === "idle" && !hideInvestigate && (
           <button
-            onClick={startInvestigation}
+            onClick={() => startInvestigation()}
             className={cn(
               "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
               "bg-white/[0.06] text-foreground/90 border border-white/[0.1]",

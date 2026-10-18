@@ -81,9 +81,9 @@ export async function POST(request: Request) {
         (issuesPayload.repository as GitHubIssuesPayload["repository"]) ??
         (issuesPayload.repo as GitHubIssuesPayload["repository"])
       const issueNumber =
-        issue.number != null
+        issue?.number != null
           ? Number(issue.number)
-          : issue.id != null
+          : issue?.id != null
             ? Number(issue.id)
             : null
       if (!issue?.title || !repo?.html_url || issueNumber == null || !Number.isInteger(issueNumber)) {

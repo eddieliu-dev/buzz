@@ -62,7 +62,6 @@ export interface AgentState {
 }
 
 // ─── Backend report shape (from pipeline.complete event) ─────
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface InvestigationReport {
   issue: { title: string; body: string; repo: string }
   triage: {
@@ -85,7 +84,7 @@ export interface InvestigationReport {
     evidence_collected: {
       question: string
       answer: string
-      sources: any[]
+      sources: unknown[]
     }[]
   }
   documentation: {
@@ -97,7 +96,7 @@ export interface InvestigationReport {
     reasoning: string
     confidence: string
     total_docs_scanned: number
-    relevant_messages: any[]
+    relevant_messages: unknown[]
   }
   log_analysis: {
     suspicious_logs: {
@@ -126,7 +125,6 @@ export interface InvestigationReport {
     attempted_models?: string[]
   }
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─── Full investigation state ────────────────────────────────
 export interface InvestigationState {

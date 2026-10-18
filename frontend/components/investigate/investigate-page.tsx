@@ -38,7 +38,7 @@ export function InvestigatePage() {
         {/* Agent panel — wide by default, shrinks when thinking process is open */}
         <div
           className={cn(
-            "flex-shrink-0 border-r border-white/[0.06] bg-black/20 transition-all duration-[750ms] ease-in-out overflow-hidden",
+            "flex-shrink-0 border-r border-white/[0.06] bg-black/20 transition-all [transition-duration:750ms] ease-in-out overflow-hidden",
             hasSelectedAgent ? "w-80" : "flex-1"
           )}
         >

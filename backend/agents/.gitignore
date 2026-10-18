@@ -1,2 +1,6 @@
 .env
 venv
+
+# Generated investigation output and cloned repositories
+/example/last_*.json
+/workspaces/

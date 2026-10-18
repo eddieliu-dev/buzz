@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -6,8 +7,20 @@ venv/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.ruff_cache/
+
+# Local configuration and databases
 .env
+.env.*
+!.env.example
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Editor and operating system files
+.DS_Store
 .cache/
 .idea/
 .vscode/

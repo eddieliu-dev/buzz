@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 import { postStatusUpdateInThread } from "@/lib/slack"
-import { transitionTo, getIssueCreatedAt } from "@/lib/issue-state"
+import { transitionTo, getIssueCreatedAt, type IssueState } from "@/lib/issue-state"
 
-const BADGE_BY_STATE: Record<string, string> = {
+const BADGE_BY_STATE = {
   INVESTIGATING: "🔍 Investigation ended",
   REPORT_READY: "📋 Report ready",
   PR_OPENED: "🔀 PR opened",
   REVIEW_COMPLETED: "✅ Review completed",
   NEEDS_HUMAN: "👤 Needs human",
-}
+} satisfies Record<Exclude<IssueState, "OPEN">, string>
 
 export type StatusUpdateBody = {
   channelId: string
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as StatusUpdateBody
     const { channelId, threadTs, state, confidence } = body
-    if (!channelId || !threadTs || !state || !BADGE_BY_STATE[state]) {
+    if (!channelId || !threadTs || !state || !Object.prototype.hasOwnProperty.call(BADGE_BY_STATE, state)) {
       return NextResponse.json(
         { error: "Missing or invalid channelId, threadTs, or state" },
         { status: 400 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { transitionCase } from "@/lib/case-state-machine"
 
-type Params = { params: Promise<{ id: string }> }
+type Params = { params: { id: string } }
 
 /**
  * POST /api/cases/[id]/transition
@@ -12,7 +12,7 @@ export async function POST(
   request: Request,
   { params }: Params
 ) {
-  const { id: caseId } = await params
+  const { id: caseId } = params
   try {
     const body = (await request.json()) as { toState?: string; metadata?: Record<string, unknown> }
     const toState = body?.toState
