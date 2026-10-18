@@ -15,7 +15,7 @@ export const ALL_AGENT_IDS: AgentId[] = [
 ]
 
 // ─── Agent status through investigation lifecycle ────────────
-export type AgentStatus = "idle" | "running" | "finding" | "done"
+export type AgentStatus = "idle" | "running" | "finding" | "done" | "stopped"
 
 // ─── Event types for individual agent actions ────────────────
 export type AgentEventType =
@@ -128,7 +128,8 @@ export interface InvestigationReport {
 
 // ─── Full investigation state ────────────────────────────────
 export interface InvestigationState {
-  status: "idle" | "running" | "complete"
+  status: "idle" | "running" | "complete" | "failed"
+  error: string | null
   agents: Record<AgentId, AgentState>
   timeline: TimelineEvent[]
   selectedAgent: AgentId | null

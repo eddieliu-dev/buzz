@@ -55,6 +55,13 @@ function StatusBadge({ status }: { status: AgentState["status"] }) {
           Done
         </span>
       )
+    case "stopped":
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-red-400">
+          <AlertTriangle className="h-3 w-3" />
+          Stopped
+        </span>
+      )
   }
 }
 
@@ -195,10 +202,11 @@ export function AgentSidebar() {
               className={cn(
                 "text-xs font-medium",
                 state.status === "running" && "text-blue-400",
-                state.status === "complete" && "text-emerald-400"
+                state.status === "complete" && "text-emerald-400",
+                state.status === "failed" && "text-red-400"
               )}
             >
-              {state.status === "running" ? "Investigating…" : "Complete"}
+              {state.status === "running" ? "Investigating…" : state.status === "failed" ? "Failed" : "Complete"}
             </span>
           </div>
           <div className="mt-1 flex items-center justify-between">

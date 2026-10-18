@@ -4,6 +4,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useReducer,
   useRef,
 } from "react"
@@ -19,6 +20,7 @@ import {
   TimelineEvent,
 } from "./types"
 import { agentMeta, allAgentEvents, demoReport } from "./agent-data"
+import { consumeInvestigationStream, type BackendEvent } from "./investigation-stream"
 
 // ─── Initial state ───────────────────────────────────────────
 function makeInitialAgentState(id: AgentId): AgentState {
@@ -43,6 +45,7 @@ function makeAllAgents(status: AgentStatus = "idle"): Record<AgentId, AgentState
 
 const initialState: InvestigationState = {
   status: "idle",
+  error: null,
   agents: makeAllAgents("idle"),
   timeline: [],
   selectedAgent: null,
@@ -59,6 +62,7 @@ type Action =
   | { type: "AGENT_STATUS"; agentId: AgentId; status: AgentStatus }
   | { type: "TIMELINE_EVENT"; event: TimelineEvent }
   | { type: "INVESTIGATION_COMPLETE" }
+  | { type: "INVESTIGATION_FAILED"; error: string }
   | { type: "SET_REPORT"; report: InvestigationReport }
   | { type: "TICK"; elapsedMs: number }
 
@@ -118,6 +122,16 @@ function reducer(state: InvestigationState, action: Action): InvestigationState 
     case "INVESTIGATION_COMPLETE":
       return { ...state, status: "complete" }
 
+    case "INVESTIGATION_FAILED": {
+      const agents = { ...state.agents }
+      for (const id of ALL_AGENT_IDS) {
+        if (agents[id].status === "running" || agents[id].status === "finding") {
+          agents[id] = { ...agents[id], status: "stopped" }
+        }
+      }
+      return { ...state, status: "failed", error: action.error, agents, report: null }
+    }
+
     case "SET_REPORT":
       return { ...state, report: action.report }
 
@@ -132,15 +146,6 @@ function reducer(state: InvestigationState, action: Action): InvestigationState 
 // ─── Backend SSE event → Frontend event mapping ──────────────
 
 let _sseEventId = 0
-
-interface BackendEvent {
-  agent: string
-  type: string
-  step: string
-  message: string
-  data: Record<string, unknown>
-  timestamp: number
-}
 
 const BACKEND_TYPE_MAP: Record<string, AgentEventType> = {
   status: "action",
@@ -192,15 +197,18 @@ function mapBackendEvent(be: BackendEvent, elapsedMs: number): AgentEvent | null
 }
 
 // ─── Context ─────────────────────────────────────────────────
+interface InvestigationParams {
+  issueTitle: string
+  issueBody: string
+  repoUrl: string
+  repoName: string
+}
+
 interface EngineContext {
   state: InvestigationState
   dispatch: React.Dispatch<Action>
-  startInvestigation: (params?: {
-    issueTitle: string
-    issueBody: string
-    repoUrl: string
-    repoName: string
-  }) => void
+  startInvestigation: (params?: InvestigationParams) => void
+  retryInvestigation: () => void
   resetInvestigation: () => void
   selectAgent: (id: AgentId | null) => void
 }
@@ -221,6 +229,7 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const startTime = useRef<number>(0)
   const tickInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const lastParams = useRef<InvestigationParams | undefined>(undefined)
 
   const clearAllTimeouts = useCallback(() => {
     timeoutIds.current.forEach(clearTimeout)
@@ -235,6 +244,8 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  useEffect(() => clearAllTimeouts, [clearAllTimeouts])
+
   const selectAgent = useCallback(
     (id: AgentId | null) => dispatch({ type: "SELECT_AGENT", agentId: id }),
     [dispatch]
@@ -247,13 +258,9 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
 
   // ── Start investigation (real backend SSE or demo mock) ─────
   const startInvestigation = useCallback(
-    (params?: {
-      issueTitle: string
-      issueBody: string
-      repoUrl: string
-      repoName: string
-    }) => {
+    (params?: InvestigationParams) => {
       clearAllTimeouts()
+      lastParams.current = params
       dispatch({ type: "START_INVESTIGATION" })
 
       startTime.current = Date.now()
@@ -289,148 +296,55 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
               signal: controller.signal,
             })
 
-            if (!res.ok || !res.body) {
-              dispatch({
-                type: "AGENT_EVENT",
-                event: {
-                  id: "sse-err",
-                  agentId: "triage",
-                  type: "error",
-                  message: `Backend returned ${res.status}. Is the Python server running on port 8000?`,
-                  delay: 0,
-                },
-              })
-              dispatch({ type: "AGENT_STATUS", agentId: "triage", status: "running" })
-              return
-            }
+            await consumeInvestigationStream(res, controller.signal, (be) => {
+              if (abortRef.current !== controller || controller.signal.aborted) return
+              const elapsedMs = Date.now() - startTime.current
 
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-            let buffer = ""
-
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-
-              buffer += decoder.decode(value, { stream: true })
-
-              const lines = buffer.split("\n")
-              buffer = lines.pop() || ""
-
-              for (const line of lines) {
-                if (!line.startsWith("data: ")) continue
-                const jsonStr = line.slice(6).trim()
-                if (!jsonStr) continue
-
-                let be: BackendEvent
-                try {
-                  be = JSON.parse(jsonStr)
-                } catch {
-                  continue
-                }
-
-                const elapsedMs = Date.now() - startTime.current
-
-                if (be.agent === "pipeline" && be.type === "complete") {
-                  activeAgents.forEach((id) => {
-                    dispatch({ type: "AGENT_STATUS", agentId: id, status: "done" })
-                    dispatch({
-                      type: "AGENT_EVENT",
-                      event: {
-                        id: `sse-${++_sseEventId}`,
-                        agentId: id,
-                        type: "complete",
-                        message: `${agentMeta[id].name} complete`,
-                        timestamp: elapsedMs,
-                        delay: 0,
-                      },
-                    })
-                  })
-                  if (be.data?.report) {
-                    dispatch({
-                      type: "SET_REPORT",
-                      report: be.data.report as InvestigationReport,
-                    })
-                  }
-                  dispatch({ type: "INVESTIGATION_COMPLETE" })
-                  if (tickInterval.current) {
-                    clearInterval(tickInterval.current)
-                    tickInterval.current = null
-                  }
-                  continue
-                }
-
-                if (be.agent === "pipeline" && be.type === "error") {
-                  dispatch({
-                    type: "AGENT_EVENT",
-                    event: {
-                      id: `sse-${++_sseEventId}`,
-                      agentId: "triage",
-                      type: "error",
-                      message: be.message,
-                      timestamp: elapsedMs,
-                      delay: 0,
-                    },
-                  })
-                  dispatch({ type: "INVESTIGATION_COMPLETE" })
-                  if (tickInterval.current) {
-                    clearInterval(tickInterval.current)
-                    tickInterval.current = null
-                  }
-                  continue
-                }
-
-                const frontendEvent = mapBackendEvent(be, elapsedMs)
-                if (!frontendEvent) continue
-
-                if (!activeAgents.has(frontendEvent.agentId)) {
-                  activeAgents.add(frontendEvent.agentId)
-                  dispatch({
-                    type: "AGENT_STATUS",
-                    agentId: frontendEvent.agentId,
-                    status: "running",
-                  })
-                }
-
-                dispatch({ type: "AGENT_EVENT", event: frontendEvent })
-
-                if (
-                  be.type === "result" &&
-                  be.step === "complete" &&
-                  isValidAgentId(be.agent)
-                ) {
-                  dispatch({
-                    type: "AGENT_EVENT",
-                    event: {
-                      id: `sse-${++_sseEventId}`,
-                      agentId: be.agent as AgentId,
-                      type: "complete",
-                      message: be.message,
-                      timestamp: elapsedMs,
-                      delay: 0,
-                    },
-                  })
-                  dispatch({
-                    type: "AGENT_STATUS",
-                    agentId: be.agent as AgentId,
-                    status: "done",
-                  })
-                }
+              if (be.agent === "pipeline" && be.type === "error") {
+                throw new Error(be.message || "The investigation failed. Please try again.")
               }
-            }
-          } catch (err: unknown) {
-            if (err instanceof DOMException && err.name === "AbortError") return
-            console.error("SSE connection error:", err)
-            dispatch({
-              type: "AGENT_EVENT",
-              event: {
-                id: `sse-err-${++_sseEventId}`,
-                agentId: "triage",
-                type: "error",
-                message: `Connection error: ${err instanceof Error ? err.message : String(err)}`,
-                delay: 0,
-              },
+
+              if (be.agent === "pipeline" && be.type === "complete") {
+                const report = be.data.report
+                if (!report || typeof report !== "object" || Array.isArray(report)) {
+                  throw new Error("The investigation ended without a report. Please try again.")
+                }
+                activeAgents.forEach((id) => {
+                  dispatch({ type: "AGENT_STATUS", agentId: id, status: "done" })
+                })
+                dispatch({ type: "SET_REPORT", report: report as InvestigationReport })
+                dispatch({ type: "INVESTIGATION_COMPLETE" })
+                return
+              }
+
+              const frontendEvent = mapBackendEvent(be, elapsedMs)
+              if (!frontendEvent) return
+              dispatch({ type: "AGENT_EVENT", event: frontendEvent })
+
+              if (
+                be.type === "result" &&
+                be.step === "complete" &&
+                isValidAgentId(be.agent)
+              ) {
+                dispatch({ type: "AGENT_STATUS", agentId: be.agent, status: "done" })
+              }
             })
+          } catch (err: unknown) {
+            // A reset, retry, or unmount owns cleanup for an abandoned run.
+            if (controller.signal.aborted || abortRef.current !== controller) return
+            dispatch({
+              type: "INVESTIGATION_FAILED",
+              error: err instanceof Error ? err.message : "The investigation failed. Please try again.",
+            })
+          } finally {
+            if (abortRef.current === controller) {
+              dispatch({ type: "TICK", elapsedMs: Date.now() - startTime.current })
+              if (tickInterval.current) {
+                clearInterval(tickInterval.current)
+                tickInterval.current = null
+              }
+              abortRef.current = null
+            }
           }
         }
 
@@ -497,9 +411,13 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     [clearAllTimeouts]
   )
 
+  const retryInvestigation = useCallback(() => {
+    startInvestigation(lastParams.current)
+  }, [startInvestigation])
+
   return (
     <Ctx.Provider
-      value={{ state, dispatch, startInvestigation, resetInvestigation, selectAgent }}
+      value={{ state, dispatch, startInvestigation, retryInvestigation, resetInvestigation, selectAgent }}
     >
       {children}
     </Ctx.Provider>

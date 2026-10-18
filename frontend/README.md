@@ -121,8 +121,15 @@ frontend/
 - `npm run start` — Start production server
 - `npm run lint` — Run ESLint
 - `npm run typecheck` — Check TypeScript types without emitting files
+- `npm test` — Run investigation error handling and stream regression tests (no API keys needed)
 - `npm run db:push` — Push Prisma schema to the database (create/update tables)
 - `npm run db:studio` — Open Prisma Studio to inspect/edit the DB
+
+## Investigation errors
+
+Investigations show a failure message and a **Retry investigation** button when the backend is unavailable,
+the pipeline fails, or the stream ends before completion. Retry uses the same issue details.
+Reset and navigation cancel the client stream; agent work already running on the Python server may continue.
 
 ## UI Components
 

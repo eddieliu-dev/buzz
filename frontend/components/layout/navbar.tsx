@@ -84,6 +84,10 @@ export function Navbar({ hideInvestigate = false }: { hideInvestigate?: boolean 
           </div>
         )}
 
+        {state.status === "failed" && (
+          <span className="text-xs font-medium text-red-400">Investigation failed</span>
+        )}
+
         {state.status !== "idle" && (
           <button
             onClick={resetInvestigation}
