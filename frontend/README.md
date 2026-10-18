@@ -1,136 +1,114 @@
-# Distributed Systems Agent — Frontend
+# Buzz · Web workspace
 
-Next.js app: web UI, Slack integration, GitHub webhooks, and case state machine (Prisma + SQLite).
+[Back to Buzz](../README.md) · [Backend guide](../backend/README.md)
 
-## Running the project (after cloning)
+The Next.js app serves the case dashboard, investigation UI, API routes, and GitHub/Slack integrations. Prisma stores case records and state transitions in SQLite. The Python service provides the investigation stream.
 
-### 1. Install dependencies
+## Local setup
+
+From the repository root:
 
 ```bash
+cp frontend/.env.example frontend/.env
 cd frontend
-npm install
-```
-
-### 2. Environment variables
-
-- **`.env`** (required for DB) — Prisma reads this. Create it from the example:
-  ```bash
-  cp .env.example .env
-  ```
-  Default `DATABASE_URL="file:./dev.db"` is fine for local development.
-
-- **`.env.local`** (optional) — Slack and GitHub webhook secrets. Copy from example and fill in what you use:
-  ```bash
-  cp .env.example .env.local
-  ```
-  | Variable | Required for | Where to get it |
-  |----------|--------------|------------------|
-  | `SLACK_BOT_TOKEN` | Posting to Slack, button actions | Slack app → OAuth & Permissions → Bot User OAuth Token |
-  | `SLACK_CHANNEL_ID` | Posting to Slack | Channel ID from Slack (right‑click channel → Copy link) |
-  | `SLACK_SIGNING_SECRET` | Verifying Slack button clicks | Slack app → Basic Information → Signing Secret |
-  | `GITHUB_WEBHOOK_SECRET` | Receiving GitHub issue events | See [GitHub App / webhook setup](#github-app--webhook-setup) below |
-
-  You can run the app without these; Slack/GitHub features will fail until they’re set.
-
-#### GitHub App / webhook setup
-
-To have **new GitHub issues** create a case in the DB and post to Slack, GitHub must send webhooks to your app. Use either a **repository webhook** (one repo) or a **GitHub App** (multiple repos or app features).
-
-**Option A — Repository webhook (simplest for one repo)**
-
-1. In your repo: **Settings** → **Webhooks** → **Add webhook**.
-2. **Payload URL:** `https://<your-public-host>/api/webhooks/github`  
-   For local dev, expose your server (e.g. [ngrok](https://ngrok.com)) and use `https://<your-ngrok-subdomain>.ngrok.io/api/webhooks/github`.
-3. **Content type:** `application/json`.
-4. **Secret:** Generate a random string (e.g. `openssl rand -hex 32`). Put the **same value** in `GITHUB_WEBHOOK_SECRET` in `.env.local`.
-5. Under "Which events would you like to trigger this webhook?", choose **Let me select individual events** and check **Issues**. Save.
-
-**Option B — GitHub App (multiple repos or app-level features)**
-
-1. **GitHub** → **Settings** (or org settings) → **Developer settings** → **GitHub Apps** → **New GitHub App**.
-2. **Webhook URL:** `https://<your-public-host>/api/webhooks/github` (use ngrok for local dev as above).
-3. **Webhook secret:** Generate a random string; set the **same value** as `GITHUB_WEBHOOK_SECRET` in `.env.local`.
-4. Under "Permissions & events", subscribe to **Issues** (read + write if you want the app to act on issues). Save.
-5. **Install App** on the repo(s) you want. Events from those repos will POST to your webhook URL.
-
-The app only acts on **issues.opened** (creates case, posts to Slack). Other events (e.g. `pull_request`, `issue_comment`) are accepted and logged but not processed.
-
-#### Slack @mention — start a case from Slack (TICKET-1.3)
-
-Users can start a BugPilot case by **@mentioning the app** in a channel or thread with a bug description. Optionally reference a GitHub issue (e.g. `#123` or `owner/repo#123`).
-
-1. **Slack app** → **Event Subscriptions** → **Enable Events** → **Request URL:** `https://<your-public-host>/api/slack/events` (use ngrok for local dev).
-2. Under **Subscribe to bot events**, add **app_mention**. Save.
-3. Reinstall the app to the workspace if prompted.
-4. Optional: set `GITHUB_DEFAULT_REPO=owner/repo` in `.env.local` so `#123` in the message resolves to that repo, and so the "Create GitHub issue" button can link to a new-issue URL.
-
-When someone mentions the bot, the app creates a case (with `sourceType: "slack"`), stores the message and Slack user/channel/thread, and replies in the same thread with action buttons (Investigate, etc.). The case appears in the dashboard and the thread is the timeline.
-
-**Bot not responding to @mentions?**
-
-1. **Request URL must be publicly reachable.** For local dev, use [ngrok](https://ngrok.com) (e.g. `ngrok http 3000`) and set **Event Subscriptions → Request URL** to `https://<your-ngrok-host>/api/slack/events`. Slack will not send events to `localhost`.
-2. **Env in `.env.local`:** `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` (both required). Wrong or missing signing secret causes 401 and no reply.
-3. **Check the terminal** where `npm run dev` is running. You should see `[Slack events] POST received` when you @ the bot. If you see `401 Invalid signature`, fix `SLACK_SIGNING_SECRET`. If you see `handleAppMention failed`, read the error (e.g. missing token, DB error).
-4. **Reinstall the app** after changing Event Subscriptions or Request URL so Slack picks up the new config.
-
-### 3. Database
-
-```bash
-npx prisma generate
-npx prisma db push
-```
-
-This creates the SQLite DB and tables (e.g. `dev.db` in `frontend/prisma/`).
-
-### 4. Start the dev server
-
-```bash
+npm ci
+npm run db:push
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [localhost:3000](http://localhost:3000). `npm ci` generates the Prisma client through `postinstall`; `db:push` creates the tables. On subsequent runs, keep your existing `.env`.
 
----
+Run the [agent service](../backend/README.md#run-the-api) on port 8000 to launch real investigations. The dashboard can run on its own, but new cases require GitHub or Slack ingestion.
 
-## Tech stack
+## Environment
 
-- **Next.js 14** — App Router, API routes
-- **TypeScript** — Type safety
-- **Tailwind CSS** — Styling
-- **shadcn/ui** — UI components (Radix UI)
-- **Prisma** — SQLite for cases and state transitions
+Use `frontend/.env` for `DATABASE_URL`, which Prisma reads. Next.js reads it too. Integration secrets can optionally go in `.env.local`; Next.js gives those values precedence, so avoid conflicting entries between the files.
 
-## Project Structure
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | SQLite connection; the example uses `file:./dev.db`, resolved relative to the Prisma schema. |
+| `BACKEND_URL` | Python agent service URL; defaults to `http://localhost:8000`. |
+| `SLACK_BOT_TOKEN` | Post issue summaries and thread replies. |
+| `SLACK_CHANNEL_ID` | Destination channel for GitHub issue notifications. |
+| `SLACK_SIGNING_SECRET` | Verify Slack events and interaction payloads. |
+| `GITHUB_WEBHOOK_SECRET` | Verify GitHub webhook signatures. |
+| `GITHUB_DEFAULT_REPO` | Resolve Slack references such as `#123` to an `owner/repo`. |
+| `CURSOR_OPEN_URL` | Optional override for the Open in Cursor handoff URL. |
 
+Restart the development server after changing environment values.
+
+## Connect GitHub and Slack
+
+For local development, expose port 3000 through a public HTTPS tunnel and use that public base URL in your integration settings. GitHub and Slack cannot deliver webhooks to `localhost`.
+
+### Slack
+
+1. Configure a Slack app with a bot token, `chat:write` and `app_mentions:read` bot scopes, and invite it to your chosen channel.
+2. Set `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, and `SLACK_SIGNING_SECRET` in your local environment file. Use the app's **Signing Secret**, not its client secret.
+3. Enable event subscriptions at `https://<public-host>/api/slack/events` and subscribe to `app_mention`.
+4. Enable interactivity at `https://<public-host>/api/slack/interactions` for thread action buttons.
+5. Install or reinstall the app as needed after permission changes.
+
+Mention the app with a bug description to create a case. You can include a GitHub issue URL, `owner/repo#123`, or `#123` when `GITHUB_DEFAULT_REPO` is set. Mentions without an issue reference create Slack-only cases. For web code investigations, include an issue reference when creating the case; the current case UI assumes a repository is available.
+
+### GitHub
+
+GitHub issue ingestion posts a Slack notification as part of its flow, so configure Slack posting first.
+
+1. Create a repository webhook with URL `https://<public-host>/api/webhooks/github` and content type `application/json`.
+2. Set a webhook secret and put the same value in `GITHUB_WEBHOOK_SECRET`.
+3. Subscribe to **Issues** events.
+4. Open a new issue in that repository, then refresh the Buzz dashboard and open its case.
+
+A GitHub App can use the same webhook URL and secret; subscribe it to issues and install it on the intended repositories. The current handler processes only `issues.opened`. Other event types are accepted and logged without starting investigations.
+
+## Investigation behavior
+
+Open a case and choose **Launch Investigation**. Agent events stream through `/api/investigate`, with evidence in the agent panels and a report after completion.
+
+Web investigations currently request patch generation, which can write code, commit, push a branch, and open a PR using the backend's Git credentials. See [patch behavior](../backend/README.md#patch-generation) before running against a repository.
+
+Failed requests, fatal pipeline errors, malformed events, and streams that close before completion show an error and a **Retry investigation** button. Retry uses the same issue details. Finished agent results remain visible; unfinished agents stop.
+
+Reset and navigation cancel the client stream. Already-running Python work may continue, and retry starts a new run. Reports currently live in page memory and disappear on refresh; completing an investigation does not yet update the stored case state.
+
+## Commands
+
+Run these from `frontend/`:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the development server. |
+| `npm run build` | Build the production app; Google Fonts downloads require network access on a fresh build. |
+| `npm run start` | Serve an existing production build. |
+| `npm run lint` | Check ESLint rules. |
+| `npm run typecheck` | Check TypeScript without emitting files. |
+| `npm test` | Run investigation regression tests without API keys. |
+| `npm run db:push` | Apply the Prisma schema to the local database. |
+| `npm run db:studio` | Inspect cases and transitions in Prisma Studio. |
+
+## Source map
+
+```text
+app/                      Dashboard, case pages, API routes
+components/investigate/   Agent panels, error UI, investigation report
+components/layout/        Navigation
+components/ui/            Shared UI primitives
+lib/                      Investigation engine, stream parser, integration helpers
+prisma/                   Case and transition schema
+scripts/                  Manual Slack posting utility
+tests/                    Investigation, streaming, proxy, and UI regression tests
 ```
-frontend/
-├── app/              # Next.js App Router pages
-│   ├── layout.tsx   # Root layout
-│   ├── page.tsx     # Home page
-│   └── globals.css  # Global styles
-├── components/       # React components
-│   └── ui/          # shadcn/ui components
-├── lib/             # Utility functions
-└── public/          # Static assets
-```
 
-## Available scripts
+## Troubleshooting
 
-- `npm run dev` — Start development server
-- `npm run build` — Build for production
-- `npm run start` — Start production server
-- `npm run lint` — Run ESLint
-- `npm run typecheck` — Check TypeScript types without emitting files
-- `npm test` — Run investigation error handling and stream regression tests (no API keys needed)
-- `npm run db:push` — Push Prisma schema to the database (create/update tables)
-- `npm run db:studio` — Open Prisma Studio to inspect/edit the DB
+| Symptom | Check |
+| --- | --- |
+| Empty dashboard | Configure ingestion, create an issue or mention the Slack app, and refresh. |
+| Backend unavailable | Start the Python server, check `/health`, and verify `BACKEND_URL`. |
+| Slack does not respond | Check the public event URL, bot membership/scopes, signing secret, and server logs. |
+| Signature verification fails | Ensure the provider and app have the same secret and the webhook points to the current public host. |
+| Prisma cannot find the database | Create `.env`, verify `DATABASE_URL`, and run `npm run db:push`. |
+| Build cannot fetch fonts | Allow network access to Google Fonts for the build. |
 
-## Investigation errors
-
-Investigations show a failure message and a **Retry investigation** button when the backend is unavailable,
-the pipeline fails, or the stream ends before completion. Retry uses the same issue details.
-Reset and navigation cancel the client stream; agent work already running on the Python server may continue.
-
-## UI Components
-
-The project uses shadcn/ui components. To add more components, you can use the shadcn CLI or manually add them to `components/ui/`.
+`SKIP_SLACK_SIGNATURE_VERIFY=1` is a local debugging option. Leave it unset for normal webhook verification.

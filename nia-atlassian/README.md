@@ -1,5 +1,7 @@
 # nia-atlassian
 
+[Back to Buzz](../README.md)
+
 Fetch Confluence pages or Jira tickets from Atlassian, let the user choose what to keep, and index selected items into Nia.
 
 ## What this does
@@ -35,7 +37,8 @@ Required `.env` values:
 ```bash
 python sync_atlassian_to_nia.py confluence \
   --space ENG \
-  --limit 20
+  --limit 20 \
+  --out-dir out
 ```
 
 ### Jira
@@ -43,7 +46,8 @@ python sync_atlassian_to_nia.py confluence \
 ```bash
 python sync_atlassian_to_nia.py jira \
   --jql "project = ENG ORDER BY updated DESC" \
-  --limit 20
+  --limit 20 \
+  --out-dir out
 ```
 
 ### Non-interactive selection
@@ -52,20 +56,23 @@ python sync_atlassian_to_nia.py jira \
 python sync_atlassian_to_nia.py confluence \
   --space ENG \
   --pick "1,2,5" \
-  --source-name "eng-confluence"
+  --source-name "eng-confluence" \
+  --out-dir out
 ```
 
 ### Dry run
 
 ```bash
-python sync_atlassian_to_nia.py jira --limit 10 --all --dry-run
+python sync_atlassian_to_nia.py jira --limit 10 --all --dry-run --out-dir out
 ```
 
 ## Output files
 
-By default, snapshots are written to `nia-atlassian/out`:
+The commands above write snapshots to `out/` inside `nia-atlassian/`:
 
 - `confluence_fetched.json` / `jira_fetched.json`
 - `confluence_selected.json` / `jira_selected.json`
 
 These help you audit exactly what was indexed.
+
+Without `--out-dir`, the script uses `nia-atlassian/out` relative to your current directory.
